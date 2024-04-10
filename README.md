@@ -24,7 +24,7 @@ improving diagnostic efficiency.
 the dataset.
 • dermatoscopic images for training and testing Deep Learning
 models to classify skin lesions.
-# Methodological approach: The
+# Methodological approach: 
 • Approach emphasizes the use of CNN, and VGG-inspired
 model, to diagnose skin lesions.
 • Architectures of the models and its perfromance to ascertain
