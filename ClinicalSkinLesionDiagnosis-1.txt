@@ -1,0 +1,554 @@
+#!/usr/bin/env python
+# coding: utf-8
+
+# # Step 1: Importing Required Libraries and Connections
+
+# In[1]:
+
+
+pip install torchvision
+
+
+# In[2]:
+
+
+import pandas as pnd
+import numpy as nmp
+import cv2, os
+from google.colab.patches import cv2_imshow
+import warnings
+from imblearn.over_sampling import RandomOverSampler
+import matplotlib.pyplot as pt
+import random
+from datetime import datetime as dt
+import pickle
+import torch
+import torchvision
+from PIL import Image
+import seaborn as sens
+import requests
+import tensorflow as tsfl
+from tensorflow.keras.models import Sequential as Seq
+from tensorflow.keras.layers import Conv2D, Flatten, Dense,MaxPooling2D as MPool2D, Dropout, BatchNormalization
+from sklearn.model_selection import train_test_split as tts
+
+# Suppress warnings
+warnings.filterwarnings('ignore')
+
+# Mount Drive
+from google.colab import drive
+drive.mount('/content/drive')
+
+
+# # Step 2: Load Data and Define Labels
+
+# In[4]:
+
+
+DATA_PATH = '/content/drive/MyDrive/DDNL_dataset-20231204T181353Z-001/DDNL_dataset/hmnist_28_28_RGB.csv'
+csv_df = pnd.read_csv(DATA_PATH)
+
+
+# In[5]:
+
+
+METADATA_PATH = '/content/drive/MyDrive/DDNL_dataset-20231204T181353Z-001/DDNL_dataset/HAM10000_metadata.csv'
+IMAGE_SRC_DIR = '/content/drive/MyDrive/DDNL_dataset-20231204T181353Z-001/DDNL_dataset/HAM10000'
+
+
+# The dataset utilized is HAM10000, an acronym for "Human Against Machine with 10000".The dataset consists of 10,015 dermatoscopic pictures that have been provided for academic machine learning applications. The ISIC repository provides access to these photos. This dataset functions as a standard for evaluating machine learning algorithms and enables direct comparisons with human experts.
+# 
+# There are seven discrete categorizations of skin cancer, which are as follows:
+# 
+# 1. Melanocytic nevi
+# 2. Melanoma
+# 3. Benign keratosis
+# 4. Basal cell carcinoma
+# 5. Actinic keratoses
+# 6. Vascular lesions
+# 7. Dermatofibroma
+# 
+
+# In[6]:
+
+
+# Display the first 5 and last 5 rows
+display(csv_df.head())
+print(".\n.\n.")
+display(csv_df.tail())
+
+
+# # Step 3: Train-Test Split
+
+# In[7]:
+
+
+# Prepare data for model training
+X = csv_df.drop(['label'], axis=1)  # Features
+y = csv_df[['label']]  # Target variable
+
+# Split data into training and test sets
+trainx, X_test, trainy, y_test = tts(X, y, test_size=0.2, random_state=42)
+
+# Flatten the data for model input
+X_flattened = X.values.reshape(X.shape[0], -1)
+
+# Split flattened data into training and test sets
+trainx_flattened, X_test_flattened, trainy_flattened, y_test_flattened = tts(X_flattened, y, test_size=0.2, random_state=42)
+
+
+# In[8]:
+
+
+# Preparing data for training the model
+# Outputting the sizes of training and testing datasets
+print(f"Length of Training Set: {len(trainx)}")
+print(f"Length of Testing Set: {len(X_test)}")
+
+# Retrieving and displaying unique labels present in the dataset
+distinct_labels = csv_df['label'].unique()
+print(f"Distinct Labels in Dataset: {distinct_labels}")
+
+
+# In[9]:
+
+
+# Define classes and their descriptions for clarity
+CLASS_NAMES = {
+    0: ('akiec', 'Actinic keratoses'),
+    1: ('bcc', 'Basal cell carcinoma'),
+    2: ('bkl', 'Benign keratosis'),
+    3: ('df', 'Dermatofibroma'),
+    4: ('nv', 'melanocytic nevi'),
+    5: ('vasc', 'Vascular lesions'),
+    6: ('mel', 'Melanoma'),
+}
+
+
+# In[10]:
+
+
+# Determine the computation device based on GPU availability
+computation_device = torch.device("GPU" if torch.cuda.is_available() else "cpu")
+print(f"Computation Device Selected: {computation_device}")
+
+
+# In this project, we aim to identify seven distinct categories of skin cancer using a Convolutional Neural Network (CNN) implemented with the Keras TensorFlow framework as the backend. Subsequently, I will analyze the outcomes to assess the practical utility of the model.
+# We will proceed systematically to categorize the seven types of cancer.
+# 
+# We have executed the subsequent procedures for constructing and assessing the model, as follows:
+
+# # Step 4: Exploratory Data Analysis (EDA) and Preprocessing
+
+# In[12]:
+
+
+# Load dataset metadata
+table_data = pnd.read_csv('/content/drive/MyDrive/DDNL_dataset-20231204T181353Z-001/DDNL_dataset/HAM10000_metadata.csv')
+# Display the first few records
+table_data.head()
+
+
+# In[13]:
+
+
+# Setting the visual style to 'whitegrid' for a change
+sens.set(style='whitegrid')
+
+# Using a count plot with a horizontal orientation
+sens.countplot(x='label', data=trainy, orient='h')
+
+
+# In[14]:
+
+
+# 'table_data' is the DataFrame and 'dx' represents the disease classes
+disease_class_counts = table_data['dx'].value_counts()
+
+# Setting up a stacked bar chart
+pt.figure(figsize=(10, 6))
+sens.barplot(x=disease_class_counts.index, y=disease_class_counts, palette='muted')
+
+# Configuring chart labels and title
+pt.xlabel('Disease Type')
+pt.ylabel('Count')
+pt.title('Distribution of Disease Classes')
+
+# Rendering the chart
+pt.show()
+
+
+# In[15]:
+
+
+bar, ax = pt.subplots(figsize=(10, 6))
+sens.countplot(x='age', data=table_data, ax=ax, color='skyblue')
+
+# Adding labels and title for better interpretation
+pt.xlabel('Age', size=12)
+pt.ylabel('Frequency', size=12)
+pt.title('Distribution of Patients Age', size=16)
+
+# Show the plot
+pt.show()
+
+
+# In[16]:
+
+
+# Stacked bar plot for disease distribution based on location and gender
+value = table_data[['localization', 'sex']].value_counts().unstack().fillna(0)
+pt.figure(figsize=(6, 10))
+value.plot(kind='barh', stacked=True, colormap='viridis')
+pt.title('Disease Distribution Based on Location and Gender')
+pt.ylabel('Location')
+pt.xlabel('Count')
+pt.legend(['Female', 'Male', 'Unknown'])
+pt.show()
+
+
+# In[17]:
+
+
+# Assuming 'table_data' is your DataFrame and 'sex' is the column representing gender
+gender_counts = table_data['sex'].value_counts()
+
+# Create a donut chart
+fig, ax = pt.subplots(figsize=(4, 4))
+ax.pie(gender_counts, labels=gender_counts.index, autopct="%.1f%%", startangle=90, wedgeprops=dict(width=0.3))
+
+# Draw a white circle in the center to create the donut effect
+centre_circle = pt.Circle((0, 0), 0.70, fc='white')
+fig = pt.gcf()
+fig.gca().add_artist(centre_circle)
+
+# Adding a title
+pt.title('Gender Distribution')
+
+# Display the chart
+pt.show()
+
+
+# In[18]:
+
+
+# Initialize Random Over-Sampler for balancing the dataset
+data_balancer = RandomOverSampler()
+x_train, trainy = data_balancer.fit_resample(trainx, trainy)
+print('Shape of X :',x_train.shape)
+
+
+# In[19]:
+
+
+sens.countplot(data=trainy, y='label')
+
+
+# In[20]:
+
+
+def display_random_images(image_set, rows=3, cols=5, figsize=(16, 10)):
+    """Displays a grid of random images from the given image set."""
+    fig, axes = pt.subplots(rows, cols, figsize=figsize)
+    total_images = len(image_set)
+
+    for row in range(rows):
+        for col in range(cols):
+            random_index = random.randint(0, total_images - 1)
+            image = image_set[random_index].reshape(28, 28, 3)
+            axes[row, col].imshow(image)
+            axes[row, col].axis('off')
+    pt.show()
+
+# Reshape and normalize training images
+trainx = nmp.array(trainx, dtype=nmp.uint8).reshape(-1, 28, 28, 3)
+
+# Plot random images from the training set
+display_random_images(trainx)
+
+
+# In[22]:
+
+
+trainx = (trainx-nmp.mean(trainx))/nmp.std(trainx)
+
+
+# In[23]:
+
+
+X_test = nmp.array(X_test, dtype=nmp.uint8).reshape(-1, 28, 28, 3)
+# Reshape and normalize test images
+print('Shape of X :',X_test.shape)
+
+
+# # Step 5: Building a Model (CNN)
+
+# # Simple CNN Model
+
+# In[24]:
+
+
+# Define a CNN model structure
+cnn_model = Seq([
+    Conv2D(16, kernel_size=(5,5), input_shape=(28, 28, 3), activation='relu', padding='same'),
+    Conv2D(32, kernel_size=(5,5), activation='relu'),
+    MPool2D(pool_size=(2,2)),
+    Conv2D(32, kernel_size=(5,5), activation='relu', padding='same'),
+    Conv2D(64, kernel_size=(5,5), activation='relu'),
+    MPool2D(pool_size=(2,2), padding='same'),
+    Flatten(),
+    Dense(64, activation='relu'),
+    Dense(32, activation='relu'),
+    Dense(7, activation='softmax')  # Output layer for 7 classes
+])
+cnn_model.summary()
+
+
+# # VGG Model
+
+# In[25]:
+
+
+# Define a VGG-like model structure
+
+vgg_model = Seq([
+    # Block 1
+    Conv2D(64, (5,5), activation='relu', padding='same', input_shape=(28, 28, 3)),
+    Conv2D(64, (5,5), activation='relu', padding='same'),
+    MPool2D((2, 2), strides=(2, 2)),
+
+    # Block 2
+    Conv2D(128, (5,5), activation='relu', padding='same'),
+    Conv2D(128, (5,5), activation='relu', padding='same'),
+    MPool2D((2, 2), strides=(2, 2)),
+
+    # Block 3
+    Conv2D(256, (5,5), activation='relu', padding='same'),
+    MPool2D((2, 2), strides=(2, 2)),
+
+    # Block 4 - Modified for smaller input size
+    Conv2D(512, (5,5), activation='relu', padding='same'),
+    MPool2D((2, 2), strides=(2, 2)),
+
+    # Fully connected layers
+    Flatten(),
+    Dense(512, activation='relu'),
+    Dense(7, activation='softmax')  # Output layer for 7 classes
+])
+vgg_model.summary()
+
+
+# # Step 6: Setting Optimizer & Callbacks
+# 
+# 
+
+# In[26]:
+
+
+# Define a callback for saving the best model during training
+callback = tsfl.keras.callbacks.ModelCheckpoint(filepath='best_model.h5',
+                                              monitor='val_acc',
+                                              mode='max',
+                                              verbose=1,
+                                              save_best_only=True)
+
+# Define the optimizer with a specified learning rate
+optimizer = tsfl.keras.optimizers.Adam(lr=0.001)
+
+# Compile the model with the optimizer, loss function, and metrics
+cnn_model.compile(loss='sparse_categorical_crossentropy',
+              optimizer=optimizer,
+              metrics=['accuracy'])
+
+
+# In[27]:
+
+
+vgg_model.compile(loss='sparse_categorical_crossentropy',
+                  optimizer=optimizer,  # Reuse the same optimizer
+                  metrics=['accuracy'])
+
+
+# # Step 7: Model Training
+# 
+
+# In[29]:
+
+
+# Record the start time for training
+start_time = dt.now()
+
+# Train the model on the training data
+cnn_hist = cnn_model.fit(trainx,
+                    trainy,
+                    validation_split=0.2,
+                    batch_size=256,
+                    epochs=50,
+                    callbacks=[callback])
+
+# Record the end time for training
+end_time = dt.now()
+print('Training Duration:', end_time - start_time)
+
+
+# In[30]:
+
+
+# Save training history and model
+# Constructing the training history dictionary
+training_history = {
+    'loss': cnn_hist.history['loss'],          # Training loss
+    'accuracy': cnn_hist.history['accuracy'],  # Training accuracy
+    'val_loss': cnn_hist.history['val_loss'],  # Validation loss
+    'val_accuracy': cnn_hist.history['val_accuracy']  # Validation accuracy
+}
+
+with open('training_history.pkl', 'wb') as file:
+    pickle.dump(training_history, file)
+cnn_model.save('trained_model.h5')
+print("Training history and model saved successfully.")
+
+
+# In[31]:
+
+
+with open('training_history.pkl', 'wb') as file:
+    pickle.dump(training_history, file)
+cnn_model.save('trained_model.h5')
+print("Training history and model saved successfully.")
+
+
+# In[ ]:
+
+
+optimizer = tsfl.keras.optimizers.Adam(lr=0.001)
+vgg_model.compile(loss='sparse_categorical_crossentropy', optimizer=optimizer, metrics=['accuracy'])
+
+start_time = dt.now()
+
+vgg_hist = vgg_model.fit(trainx,
+                            trainy,
+                            validation_split=0.2,
+                            batch_size=256,
+                            epochs=50,
+                            shuffle=True,
+                            callbacks=[callback])
+
+# Record the end time for VGG training
+end_time = dt.now()
+print('VGG Training Duration:', end_time - start_time)
+
+
+# In[ ]:
+
+
+# Save training history and model for the VGG model
+training_history_vgg = {
+    'loss': vgg_hist.history['loss'],
+    'accuracy': vgg_hist.history['accuracy'],
+    'val_loss': vgg_hist.history['val_loss'],
+    'val_accuracy': vgg_hist.history['val_accuracy']
+}
+with open('training_history_vgg.pkl', 'wb') as file:
+    pickle.dump(training_history_vgg, file)
+vgg_model.save('trained_model_vgg.h5')
+print("VGG training history and model saved successfully.")
+
+
+# # Step 8: Model Evaluation
+
+# In[ ]:
+
+
+def plot_performance(model_name, training_history):
+    # Setting the size of the overall figure
+    pt.figure(figsize=(16, 4))
+
+    # Plotting the Accuracy
+    pt.subplot(1, 2, 1)
+    pt.plot(training_history.history['accuracy'], label='Train Accuracy')
+    pt.plot(training_history.history['val_accuracy'], label='Validation Accuracy')
+    pt.title(f'Accuracy of {model_name}')
+    pt.xlabel('Epoch')
+    pt.ylabel('Accuracy')
+    pt.legend(loc='lower right')
+
+    # Plotting the Loss
+    pt.subplot(1, 2, 2)
+    pt.plot(training_history.history['loss'], label='Train Loss')
+    pt.plot(training_history.history['val_loss'], label='Validation Loss')
+    pt.title(f'Loss of {model_name}')
+    pt.xlabel('Epoch')
+    pt.ylabel('Loss')
+    pt.legend(loc='upper right')
+
+    # Display the plots
+    pt.show()
+
+
+# In[ ]:
+
+
+plot_performance('Model', cnn_hist)
+
+
+# In[ ]:
+
+
+# Plot performance of the VGG model
+plot_performance('VGG Model', vgg_hist)
+
+
+# In[ ]:
+
+
+# Evaluate CNN model on the test set
+loss, acc = cnn_model.evaluate(X_test, y_test, verbose=2)
+print(f"CNN Model Test Accuracy: {acc}")
+
+
+# In[ ]:
+
+
+# Evaluate the VGG model on the test set
+loss_vgg, acc_vgg = vgg_model.evaluate(X_test, y_test, verbose=2)
+print(f"VGG Model Test Accuracy: {acc_vgg}")
+
+
+# In[ ]:
+
+
+count = 0
+
+# Create a 3x5 subplot
+fig, axs = pt.subplots(3, 5, figsize=(15, 9))
+fig.tight_layout()
+
+for i, temp in enumerate(os.listdir(IMAGE_SRC_DIR)):
+    imag_path = os.path.join(IMAGE_SRC_DIR, temp)
+    imag = cv2.imread(imag_path)
+    imag = cv2.resize(imag, (28, 28))
+
+    # Predict
+    result = cnn_model.predict(imag.reshape(1, 28, 28, 3))
+    max_prob = max(result[0])
+    class_ind = list(result[0]).index(max_prob)
+    class_name = CLASS_NAMES[class_ind][0]
+
+    # Display image and prediction in the subplot
+    axs[i // 5, i % 5].imshow(cv2.cvtColor(imag, cv2.COLOR_BGR2RGB))
+    axs[i // 5, i % 5].set_title(f'Class: {class_name}')
+    axs[i // 5, i % 5].axis('off')
+
+    count += 1
+    if count >= 15:
+        break
+
+pt.show()
+
+
+# In[ ]:
+
+
+
+
