@@ -1,4 +1,4 @@
-# Clinical-Skin-Lesion-Diagnosis-
+# Deep Learning - Clinical-Skin-Lesion-Diagnosis -
 Clinical Skin Lesion Diagnosis using Neural Networks
 
 # Objective
